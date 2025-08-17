@@ -5,8 +5,8 @@
   <title>CRM для навчання</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f3f4f6; }
-    .container { max-width: 400px; margin: 80px auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    input, select, button { width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #ccc; }
+    .container { max-width: 900px; margin: 40px auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    input, select, button { padding: 8px; margin: 6px; border-radius: 6px; border: 1px solid #ccc; }
     button { background: #2563eb; color: white; border: none; cursor: pointer; }
     button:hover { background: #1d4ed8; }
     .hidden { display: none; }
@@ -14,6 +14,8 @@
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background: #f9fafb; }
+    .actions { margin: 10px 0; }
+    .filters { margin: 15px 0; padding: 10px; background: #f1f5f9; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -28,6 +30,26 @@
   <div class="container hidden" id="crmBox">
     <h2>CRM Панель</h2>
     <p id="welcome"></p>
+    <div class="actions">
+      <button onclick="logout()">Вийти</button>
+      <button id="downloadBtn" class="hidden" onclick="downloadExcel()">Завантажити звіт (Excel)</button>
+    </div>
+
+    <!-- Фільтри -->
+    <div id="filtersBox" class="filters hidden">
+      <h3>Фільтри для звіту</h3>
+      <label>Дата від: <input type="date" id="filterFrom"></label>
+      <label>Дата до: <input type="date" id="filterTo"></label>
+      <label>Менеджер: 
+        <select id="filterManager"><option value="">Всі</option></select>
+      </label>
+      <label>Бренд: 
+        <select id="filterBrand"><option value="">Всі</option></select>
+      </label>
+      <button onclick="applyFilters()">Застосувати</button>
+      <button onclick="resetFilters()">Скинути</button>
+    </div>
+
     <h3>Додати запис</h3>
     <input type="date" id="date">
     <input type="text" id="clientName" placeholder="Ім'я клієнта">
@@ -58,15 +80,15 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbx5CAwdi4rjEz4C6vvjITtAq_2nJsZ6qDpzFEmoX7C7KLO5xx_pLjL6vrEwYSj6JuPd/exec";
     let currentUser = null;
+    let recordsCache = []; 
+    let filteredRecords = []; 
 
-    // При завантаженні перевіряємо localStorage
+    // Перевірка localStorage
     window.onload = async () => {
       const savedUser = localStorage.getItem("crmUser");
       if (savedUser) {
         currentUser = JSON.parse(savedUser);
-        document.getElementById("loginBox").classList.add("hidden");
-        document.getElementById("crmBox").classList.remove("hidden");
-        document.getElementById("welcome").textContent = `Вітаю, ${currentUser.username} (${currentUser.role})`;
+        showCRM();
         loadRecords();
       }
     };
@@ -83,13 +105,9 @@
 
         if (data.success) {
           currentUser = data.user;
-          // зберігаємо в localStorage
           localStorage.setItem("crmUser", JSON.stringify(currentUser));
-
           msg.textContent = "";
-          document.getElementById("loginBox").classList.add("hidden");
-          document.getElementById("crmBox").classList.remove("hidden");
-          document.getElementById("welcome").textContent = `Вітаю, ${currentUser.username} (${currentUser.role})`;
+          showCRM();
           loadRecords();
         } else {
           msg.textContent = "Невірний логін або пароль";
@@ -100,13 +118,36 @@
       }
     }
 
+    function showCRM() {
+      document.getElementById("loginBox").classList.add("hidden");
+      document.getElementById("crmBox").classList.remove("hidden");
+      document.getElementById("welcome").textContent = `Вітаю, ${currentUser.username} (${currentUser.role})`;
+
+      if (currentUser.role === "admin") {
+        document.getElementById("downloadBtn").classList.remove("hidden");
+        document.getElementById("filtersBox").classList.remove("hidden");
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem("crmUser");
+      location.reload();
+    }
+
     async function loadRecords() {
       const res = await fetch(`${API_URL}?action=records&user=${encodeURIComponent(currentUser.role === "admin" ? "all" : currentUser.username)}`);
       const data = await res.json();
+      recordsCache = data;
+      filteredRecords = [...data];
+      fillFilters();
+      renderTable(filteredRecords);
+    }
+
+    function renderTable(records) {
       const table = document.getElementById("recordsTable");
       table.innerHTML = "";
 
-      data.forEach(r => {
+      records.forEach(r => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${r.date}</td>
@@ -139,6 +180,83 @@
     async function markPurchased(id) {
       await fetch(`${API_URL}?action=updateRecord&id=${id}`);
       loadRecords();
+    }
+
+    function fillFilters() {
+      const managers = [...new Set(recordsCache.map(r => r.manager))];
+      const brands = [...new Set(recordsCache.map(r => r.brand))];
+
+      const managerSelect = document.getElementById("filterManager");
+      const brandSelect = document.getElementById("filterBrand");
+
+      managerSelect.innerHTML = `<option value="">Всі</option>`;
+      brandSelect.innerHTML = `<option value="">Всі</option>`;
+
+      managers.forEach(m => {
+        managerSelect.innerHTML += `<option value="${m}">${m}</option>`;
+      });
+      brands.forEach(b => {
+        brandSelect.innerHTML += `<option value="${b}">${b}</option>`;
+      });
+    }
+
+    function applyFilters() {
+      const from = document.getElementById("filterFrom").value;
+      const to = document.getElementById("filterTo").value;
+      const manager = document.getElementById("filterManager").value;
+      const brand = document.getElementById("filterBrand").value;
+
+      filteredRecords = recordsCache.filter(r => {
+        let ok = true;
+        if (from && r.date < from) ok = false;
+        if (to && r.date > to) ok = false;
+        if (manager && r.manager !== manager) ok = false;
+        if (brand && r.brand !== brand) ok = false;
+        return ok;
+      });
+
+      renderTable(filteredRecords);
+    }
+
+    function resetFilters() {
+      document.getElementById("filterFrom").value = "";
+      document.getElementById("filterTo").value = "";
+      document.getElementById("filterManager").value = "";
+      document.getElementById("filterBrand").value = "";
+      filteredRecords = [...recordsCache];
+      renderTable(filteredRecords);
+    }
+
+    // Експорт в Excel (XLS)
+    function downloadExcel() {
+      if (!filteredRecords.length) {
+        alert("Немає даних для експорту");
+        return;
+      }
+
+      let table = `<table border="1">
+        <tr><th>Дата</th><th>Менеджер</th><th>Клієнт</th><th>Бренд</th><th>Купив</th></tr>`;
+
+      filteredRecords.forEach(r => {
+        table += `<tr>
+          <td>${r.date}</td>
+          <td>${r.manager}</td>
+          <td>${r.clientName}</td>
+          <td>${r.brand}</td>
+          <td>${r.purchase ? "Так" : "Ні"}</td>
+        </tr>`;
+      });
+      table += "</table>";
+
+      const blob = new Blob([table], { type: "application/vnd.ms-excel" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Звіт_CRM_${new Date().toLocaleDateString()}.xls`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
   </script>
 </body>
