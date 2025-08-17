@@ -1,1 +1,130 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/crm-GP/favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="/crm-GP/logo192.png"/><link rel="manifest" href="/crm-GP/manifest.json"/><title>React App</title><script defer="defer" src="/crm-GP/static/js/main.317f6532.js"></script><link href="/crm-GP/static/css/main.e6c13ad2.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>CRM для навчання</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f3f4f6; }
+    .container { max-width: 400px; margin: 80px auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #ccc; }
+    button { background: #2563eb; color: white; border: none; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .hidden { display: none; }
+    .message { margin-top: 10px; color: red; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="container" id="loginBox">
+    <h2>Вхід до CRM</h2>
+    <input type="text" id="username" placeholder="Логін">
+    <input type="password" id="password" placeholder="Пароль">
+    <button onclick="login()">Увійти</button>
+    <p class="message" id="loginMessage"></p>
+  </div>
+
+  <div class="container hidden" id="crmBox">
+    <h2>CRM Панель</h2>
+    <p id="welcome"></p>
+    <h3>Додати запис</h3>
+    <input type="date" id="date">
+    <input type="text" id="clientName" placeholder="Ім'я клієнта">
+    <select id="brand">
+      <option value="Брі">Брі</option>
+      <option value="Брі2">Брі2</option>
+      <option value="Брі3">Брі3</option>
+      <option value="Брі4">Брі4</option>
+    </select>
+    <button onclick="addRecord()">Додати</button>
+
+    <h3>Записи</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Менеджер</th>
+          <th>Клієнт</th>
+          <th>Бренд</th>
+          <th>Купив</th>
+          <th>Дія</th>
+        </tr>
+      </thead>
+      <tbody id="recordsTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_URL = "YOUR_DEPLOYED_APPS_SCRIPT_URL";
+    let currentUser = null;
+
+    async function login() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const msg = document.getElementById("loginMessage");
+
+      msg.textContent = "Перевірка...";
+      try {
+        const res = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
+        const data = await res.json();
+
+        if (data.success) {
+          currentUser = data.user;
+          msg.textContent = "";
+          document.getElementById("loginBox").classList.add("hidden");
+          document.getElementById("crmBox").classList.remove("hidden");
+          document.getElementById("welcome").textContent = `Вітаю, ${currentUser.username} (${currentUser.role})`;
+          loadRecords();
+        } else {
+          msg.textContent = "Невірний логін або пароль";
+        }
+      } catch (err) {
+        msg.textContent = "Помилка з'єднання";
+        console.error(err);
+      }
+    }
+
+    async function loadRecords() {
+      const res = await fetch(`${API_URL}?action=records&user=${encodeURIComponent(currentUser.role === "admin" ? "all" : currentUser.username)}`);
+      const data = await res.json();
+      const table = document.getElementById("recordsTable");
+      table.innerHTML = "";
+
+      data.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.date}</td>
+          <td>${r.manager}</td>
+          <td>${r.clientName}</td>
+          <td>${r.brand}</td>
+          <td>${r.purchase ? "✅" : "❌"}</td>
+          <td>${!r.purchase ? `<button onclick="markPurchased(${r.id})">Відмітити</button>` : ""}</td>
+        `;
+        table.appendChild(tr);
+      });
+    }
+
+    async function addRecord() {
+      const body = {
+        date: document.getElementById("date").value,
+        manager: currentUser.username,
+        clientName: document.getElementById("clientName").value,
+        brand: document.getElementById("brand").value
+      };
+
+      await fetch(`${API_URL}?action=addRecord`, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+
+      loadRecords();
+    }
+
+    async function markPurchased(id) {
+      await fetch(`${API_URL}?action=updateRecord&id=${id}`);
+      loadRecords();
+    }
+  </script>
+</body>
+</html>
