@@ -155,7 +155,7 @@
           <td>${r.clientName}</td>
           <td>${r.brand}</td>
           <td>${r.purchase ? "✅" : "❌"}</td>
-          <td>${!r.purchase ? `<button onclick="markPurchased(${r.id})">Відмітити</button>` : ""}</td>
+          <td>${!r.purchase ? `<button onclick="markPurchased(${r.id})">Куплено</button>` : ""}</td>
         `;
         table.appendChild(tr);
       });
