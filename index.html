@@ -2,15 +2,18 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
-  <title>CRM для записів</title>
+  <title>CRM для навчання</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f5f5f5; }
-    .container { width: 600px; margin: 30px auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #ccc; }
-    input, select, button { padding: 8px; margin: 5px 0; width: 100%; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-    th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
-    th { background: #eee; }
+    body { font-family: Arial, sans-serif; background: #f3f4f6; }
+    .container { max-width: 400px; margin: 80px auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #ccc; }
+    button { background: #2563eb; color: white; border: none; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
     .hidden { display: none; }
+    .message { margin-top: 10px; color: red; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f9fafb; }
   </style>
 </head>
 <body>
@@ -19,145 +22,124 @@
     <input type="text" id="username" placeholder="Логін">
     <input type="password" id="password" placeholder="Пароль">
     <button onclick="login()">Увійти</button>
-    <p id="loginMessage" style="color:red"></p>
+    <p class="message" id="loginMessage"></p>
   </div>
 
   <div class="container hidden" id="crmBox">
-    <h2>CRM панель</h2>
-    <p id="userInfo"></p>
-
-    <div id="filters" class="hidden">
-      <h3>Фільтри (адміністратор)</h3>
-      <input type="date" id="filterDate">
-      <input type="text" id="filterBrand" placeholder="Бренд">
-      <input type="text" id="filterManager" placeholder="Менеджер">
-      <input type="text" id="filterRegion" placeholder="Регіон">
-      <button onclick="loadRecords()">Фільтрувати</button>
-    </div>
-
-    <div id="addRecordBox" class="hidden">
-      <h3>Додати новий запис</h3>
-      <input type="date" id="newDate">
-      <input type="text" id="newClient" placeholder="Ім’я клієнта">
-      <input type="text" id="newBrand" placeholder="Бренд">
-      <button onclick="addRecord()">Додати</button>
-      <p id="addMessage" style="color:green"></p>
-    </div>
+    <h2>CRM Панель</h2>
+    <p id="welcome"></p>
+    <h3>Додати запис</h3>
+    <input type="date" id="date">
+    <input type="text" id="clientName" placeholder="Ім'я клієнта">
+    <select id="brand">
+      <option value="Брі">Брі</option>
+      <option value="Брі2">Брі2</option>
+      <option value="Брі3">Брі3</option>
+      <option value="Брі4">Брі4</option>
+    </select>
+    <button onclick="addRecord()">Додати</button>
 
     <h3>Записи</h3>
-    <table id="recordsTable">
+    <table>
       <thead>
         <tr>
-          <th>ID</th><th>Дата</th><th>Менеджер</th><th>Клієнт</th><th>Бренд</th><th>Купівля</th>
+          <th>Дата</th>
+          <th>Менеджер</th>
+          <th>Клієнт</th>
+          <th>Бренд</th>
+          <th>Купив</th>
+          <th>Дія</th>
         </tr>
       </thead>
-      <tbody></tbody>
+      <tbody id="recordsTable"></tbody>
     </table>
-    <button onclick="exportTableToExcel()">Експорт у Excel</button>
   </div>
 
-<script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbzNsY0MNohfHV39928QQ2_nOzzuIomdvB3lWjRq9jwjotCkmJfSI03cDHZtA03-UCdi/exec";
-  let currentUser = null;
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbx5CAwdi4rjEz4C6vvjITtAq_2nJsZ6qDpzFEmoX7C7KLO5xx_pLjL6vrEwYSj6JuPd/exec";
+    let currentUser = null;
 
-  async function login() {
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value.trim();
-    const msg = document.getElementById("loginMessage");
-    msg.textContent = "";
-
-    try {
-      const res = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
-      const data = await res.json();
-      if (data.success) {
-        currentUser = data.user;
+    // При завантаженні перевіряємо localStorage
+    window.onload = async () => {
+      const savedUser = localStorage.getItem("crmUser");
+      if (savedUser) {
+        currentUser = JSON.parse(savedUser);
         document.getElementById("loginBox").classList.add("hidden");
         document.getElementById("crmBox").classList.remove("hidden");
-        document.getElementById("userInfo").textContent =
-          `Вітаю, ${data.user.username} (роль: ${data.user.role}, регіон: ${data.user.region})`;
-        if (data.user.role === "admin") {
-          document.getElementById("filters").classList.remove("hidden");
-        }
-        document.getElementById("addRecordBox").classList.remove("hidden");
+        document.getElementById("welcome").textContent = `Вітаю, ${currentUser.username} (${currentUser.role})`;
         loadRecords();
-      } else {
-        msg.textContent = "Невірний логін або пароль";
       }
-    } catch (e) {
-      msg.textContent = "Помилка підключення";
-    }
-  }
+    };
 
-  async function loadRecords() {
-    let url = `${API_URL}?action=records&username=${encodeURIComponent(currentUser.username)}&role=${currentUser.role}`;
-    if (currentUser.role === "admin") {
-      const d = document.getElementById("filterDate").value;
-      const b = document.getElementById("filterBrand").value.trim();
-      const m = document.getElementById("filterManager").value.trim();
-      const r = document.getElementById("filterRegion").value.trim();
-      if (d) url += `&date=${d}`;
-      if (b) url += `&brand=${b}`;
-      if (m) url += `&manager=${m}`;
-      if (r) url += `&region=${r}`;
-    }
-    const res = await fetch(url);
-    const records = await res.json();
+    async function login() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const msg = document.getElementById("loginMessage");
 
-    const tbody = document.querySelector("#recordsTable tbody");
-    tbody.innerHTML = "";
-    records.forEach(rec => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${rec.id}</td><td>${rec.date}</td><td>${rec.manager}</td><td>${rec.clientName}</td><td>${rec.brand}</td><td>${rec.purchase ? "✅" : "❌"}</td>`;
-      tbody.appendChild(tr);
-    });
-  }
+      msg.textContent = "Перевірка...";
+      try {
+        const res = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
+        const data = await res.json();
 
-  async function addRecord() {
-    const date = document.getElementById("newDate").value;
-    const clientName = document.getElementById("newClient").value.trim();
-    const brand = document.getElementById("newBrand").value.trim();
-    const msg = document.getElementById("addMessage");
-    msg.textContent = "";
+        if (data.success) {
+          currentUser = data.user;
+          // зберігаємо в localStorage
+          localStorage.setItem("crmUser", JSON.stringify(currentUser));
 
-    if (!date || !clientName || !brand) {
-      msg.style.color = "red";
-      msg.textContent = "Заповніть усі поля!";
-      return;
+          msg.textContent = "";
+          document.getElementById("loginBox").classList.add("hidden");
+          document.getElementById("crmBox").classList.remove("hidden");
+          document.getElementById("welcome").textContent = `Вітаю, ${currentUser.username} (${currentUser.role})`;
+          loadRecords();
+        } else {
+          msg.textContent = "Невірний логін або пароль";
+        }
+      } catch (err) {
+        msg.textContent = "Помилка з'єднання";
+        console.error(err);
+      }
     }
 
-    try {
-      const body = { date, clientName, brand, manager: currentUser.username };
-      const res = await fetch(API_URL + "?action=addRecord", {
+    async function loadRecords() {
+      const res = await fetch(`${API_URL}?action=records&user=${encodeURIComponent(currentUser.role === "admin" ? "all" : currentUser.username)}`);
+      const data = await res.json();
+      const table = document.getElementById("recordsTable");
+      table.innerHTML = "";
+
+      data.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.date}</td>
+          <td>${r.manager}</td>
+          <td>${r.clientName}</td>
+          <td>${r.brand}</td>
+          <td>${r.purchase ? "✅" : "❌"}</td>
+          <td>${!r.purchase ? `<button onclick="markPurchased(${r.id})">Відмітити</button>` : ""}</td>
+        `;
+        table.appendChild(tr);
+      });
+    }
+
+    async function addRecord() {
+      const body = {
+        date: document.getElementById("date").value,
+        manager: currentUser.username,
+        clientName: document.getElementById("clientName").value,
+        brand: document.getElementById("brand").value
+      };
+
+      await fetch(`${API_URL}?action=addRecord`, {
         method: "POST",
         body: JSON.stringify(body)
       });
-      const data = await res.json();
-      if (data.success) {
-        msg.style.color = "green";
-        msg.textContent = "Запис додано!";
-        document.getElementById("newDate").value = "";
-        document.getElementById("newClient").value = "";
-        document.getElementById("newBrand").value = "";
-        loadRecords();
-      } else {
-        msg.style.color = "red";
-        msg.textContent = "Помилка збереження!";
-      }
-    } catch (e) {
-      msg.style.color = "red";
-      msg.textContent = "Помилка підключення";
-    }
-  }
 
-  function exportTableToExcel() {
-    let table = document.getElementById("recordsTable");
-    let html = table.outerHTML;
-    let url = 'data:application/vnd.ms-excel,' + escape(html);
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "records.xls";
-    a.click();
-  }
-</script>
+      loadRecords();
+    }
+
+    async function markPurchased(id) {
+      await fetch(`${API_URL}?action=updateRecord&id=${id}`);
+      loadRecords();
+    }
+  </script>
 </body>
 </html>
